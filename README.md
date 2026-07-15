@@ -2,7 +2,9 @@
 
 A single-file, offline web app for recording **Continuous Renal Replacement Therapy (CRRT)** runs at the bedside — capturing the prescription, anticoagulation (regional citrate **CiCa** or **heparin**), circuit pressures and labs at each timepoint — so you can generate trend charts and a case‑ready report afterward.
 
-Everything is contained in one `crrt-recorder.html` file. No installation, no server, no internet required (the charting library is bundled in). Just open it in a browser.
+**▶ Run it live:** https://larrysoo.github.io/CRRT_recording/ (best in Chrome or Edge for NAS folder sync)
+
+Everything is contained in one HTML file (`index.html`, also provided as `crrt-recorder.html`). No installation, no server, no internet required (the charting library is bundled in). Just open the live link above, or download the file and open it in a browser.
 
 > **Not a medical device.** This is a documentation and case‑report aid. It does not provide clinical decision support, and nothing in it should override institutional protocols or clinical judgement. Use only de‑identified data. See the disclaimer at the bottom.
 
