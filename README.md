@@ -1,4 +1,8 @@
-# CRRT Recorder — CiCa / Heparin
+<p align="center">
+  <img src="logo.png" alt="CRRT Recorder logo" width="132">
+</p>
+
+<h1 align="center">CRRT Recorder — CiCa / Heparin</h1>
 
 A single-file, offline web app for recording **Continuous Renal Replacement Therapy (CRRT)** runs at the bedside — capturing the prescription, anticoagulation (regional citrate **CiCa** or **heparin**), circuit pressures and labs at each timepoint — so you can generate trend charts and a case‑ready report afterward.
 
