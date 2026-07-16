@@ -253,6 +253,11 @@ function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg
    ============================================================ */
 // Timepoint numeric fields grouped; used for form, table, CSV, charts
 const TP_GROUPS = [
+  { title:"Machine settings / flows", fields:[
+    ["bloodFlow","Blood flow (Qb)","mL/min"],["pbp","PBP (pre-blood pump)","mL/h"],
+    ["dialysate","Dialysate (Qd)","mL/h"],["replPre","Replacement pre","mL/h"],
+    ["replPost","Replacement post","mL/h"],
+  ]},
   { title:"Circuit pressures", fields:[
     ["pAccess","Access P","mmHg"],["pFilter","Filter P","mmHg"],["pReturn","Return P","mmHg"],
     ["pEffluent","Effluent P","mmHg"],["tmp","TMP","mmHg"],["pDrop","Pressure drop","mmHg"],
@@ -396,7 +401,7 @@ function viewSession(p){
       <div class="field" style="grid-column:1/-1"><label>Indication for CRRT</label>${inp("indication",p.indication)}</div>
     </div>
 
-    <div class="section-title">Prescription</div>
+    <div class="section-title">Prescription <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#94a3b8;font-size:11px">— starting settings; record changes per timepoint in the log</span></div>
     <div class="grid">
       <div class="field"><label>Blood flow <span class="unit">mL/min</span></label>${inp("rx.bloodFlow",p.rx.bloodFlow,"number")}</div>
       <div class="field"><label>Dialysate <span class="unit">mL/h</span></label>${inp("rx.dialysate",p.rx.dialysate,"number")}</div>
@@ -454,10 +459,31 @@ function viewLog(p){
 }
 
 /* ---------- TIMEPOINT MODAL ---------- */
+// Carry machine flows forward: newest previous timepoint value, else session prescription
+function lastTp(p){
+  const arr=p.timepoints||[]; let best=null,bestI=-1;
+  arr.forEach((t,i)=>{
+    if(best===null){best=t;bestI=i;return;}
+    const c=String(t.time||"").localeCompare(String(best.time||""));
+    if(c>0 || (c===0 && i>bestI)){best=t;bestI=i;}
+  });
+  return best;
+}
+function flowDefaults(p){
+  const L=lastTp(p)||{}, rx=p.rx||{};
+  const pick=(a,b)=> (a===""||a==null)?((b===""||b==null)?"":b):a;
+  return {
+    bloodFlow: pick(L.bloodFlow, rx.bloodFlow),
+    pbp:       pick(L.pbp, ""),
+    dialysate: pick(L.dialysate, rx.dialysate),
+    replPre:   pick(L.replPre, rx.replPre),
+    replPost:  pick(L.replPost, rx.replPost),
+  };
+}
 function openTp(id){
   const p=cur(); if(!p) return;
   editingTpId = id || null;
-  const tp = id ? p.timepoints.find(t=>t.id===id) : {};
+  const tp = id ? p.timepoints.find(t=>t.id===id) : Object.assign({}, flowDefaults(p));
   document.getElementById("tpModalTitle").textContent = id?"Edit timepoint":"Add timepoint";
   document.getElementById("tpDeleteBtn").style.display = id?"block":"none";
   const ac=p.anticoag;
@@ -501,6 +527,7 @@ function viewCharts(p){
   if(!p.timepoints.length) return `<div class="nopatient"><h3>No data to chart yet</h3><p>Add timepoints in the log to see trends.</p></div>`;
   const ac=p.anticoag;
   const cards = [];
+  cards.push(chartCard("chFlows","Machine settings / flows","Qb, dialysate, PBP & replacement over the run"));
   cards.push(chartCard("chAnticoag", ac==="CiCa"?"Calcium control (CiCa)":ac==="Heparin"?"Anticoagulation (heparin)":"Anticoagulation", ac==="CiCa"?"Post-filter iCa (target 0.25–0.35) & systemic iCa":ac==="Heparin"?"aPTT / ACT vs target":"—"));
   cards.push(chartCard("chDose", ac==="CiCa"?"Citrate & calcium dosing":"Heparin dosing", ac==="CiCa"?"Citrate dose & Ca compensation":"Heparin infusion rate"));
   cards.push(chartCard("chPress","Circuit pressures & TMP","Filter clotting surveillance"));
@@ -549,6 +576,14 @@ function drawCharts(p){
   }
   const L=key=>tps.map(t=>(t[key]===""||t[key]==null)?null:Number(t[key]));
 
+  build("chFlows",[
+    ds("Blood flow Qb (mL/min)",L("bloodFlow"),C.brand,{yAxisID:"y",stepped:true}),
+    ds("Dialysate (mL/h)",L("dialysate"),C.cyan,{yAxisID:"y2",stepped:true}),
+    ds("PBP (mL/h)",L("pbp"),C.violet,{yAxisID:"y2",stepped:true}),
+    ds("Replacement pre (mL/h)",L("replPre"),C.green,{yAxisID:"y2",stepped:true}),
+    ds("Replacement post (mL/h)",L("replPost"),C.amber,{yAxisID:"y2",stepped:true}),
+  ],{y:{title:{display:true,text:"mL/min",font:{size:10}}},y2:{title:{display:true,text:"mL/h",font:{size:10}}}});
+
   if(ac==="CiCa"){
     build("chAnticoag",[ds("Post-filter iCa",L("iCaPost"),C.violet),ds("Systemic iCa",L("iCaSys"),C.brand)],{y:{title:{display:true,text:"mmol/L",font:{size:10}}}});
     build("chDose",[ds("Citrate dose (mmol/L)",L("citrateDose"),C.cyan,{yAxisID:"y"}),ds("Ca compensation (mL/h)",L("caFlow"),C.amber,{yAxisID:"y2"})],{y2:{title:{display:true,text:"mL/h",font:{size:10}}}});
@@ -595,6 +630,16 @@ function reportHTML(p){
   const tbody = tps.length? tps.map(t=>`<tr>${keyCols.map(c=>`<td>${c[0]==="time"?fmtTime(t.time):fmt(t[c[0]])}</td>`).join("")}</tr>`).join("")
     : `<tr><td colspan="${keyCols.length}" style="text-align:center;color:#94a3b8">No timepoints recorded</td></tr>`;
 
+  // machine settings change-log: a row only when a flow changed vs the previous shown row
+  const flowKeys=[["bloodFlow","Qb (mL/min)"],["pbp","PBP (mL/h)"],["dialysate","Dialysate (mL/h)"],["replPre","Repl pre (mL/h)"],["replPost","Repl post (mL/h)"]];
+  const hasFlow=t=>flowKeys.some(k=>t[k[0]]!==""&&t[k[0]]!=null);
+  let prevF=null; const machineRows=[];
+  tps.forEach(t=>{ if(!hasFlow(t)) return; const changed=!prevF||flowKeys.some(k=>String(t[k[0]]??"")!==String(prevF[k[0]]??"")); if(changed){ machineRows.push(t); prevF=t; } });
+  const mThead = ["Time",...flowKeys.map(k=>k[1])].map(h=>`<th>${esc(h)}</th>`).join("");
+  const mBody = machineRows.length
+    ? machineRows.map(t=>`<tr><td>${fmtTime(t.time)}</td>${flowKeys.map(k=>`<td>${fmt(t[k[0]])}</td>`).join("")}</tr>`).join("")
+    : `<tr><td>${fmtTime(p.sessionStart)} (initial)</td><td>${fmt(p.rx.bloodFlow)}</td><td>—</td><td>${fmt(p.rx.dialysate)}</td><td>${fmt(p.rx.replPre)}</td><td>${fmt(p.rx.replPost)}</td></tr>`;
+
   return `<div class="report" id="reportBody">
     <h1>CRRT Case Record — ${esc(p.code||"(unnamed)")}</h1>
     <div class="rmeta">${esc(p.modality||"CRRT")} · <span class="badge ${cls}">${esc(ac)}</span> · generated ${new Date().toLocaleString()}</div>
@@ -629,6 +674,10 @@ function reportHTML(p){
     </div>`:ac==="Heparin"?`<div class="kv">
       <div><span>Target aPTT:</span> ${esc(p.targets.apttTarget)||"—"} s</div>
     </div>`:`<p>No anticoagulation was used for this run.</p>`}
+
+    <h2>Machine settings over time</h2>
+    <p style="font-size:12px;color:#64748b;margin:-4px 0 8px">${machineRows.length?"Each row marks a point where a flow setting changed during the run.":"No per-timepoint flows recorded; showing the initial prescription."}</p>
+    <table><thead><tr>${mThead}</tr></thead><tbody>${mBody}</tbody></table>
 
     <h2>Timepoint data</h2>
     <table><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>
